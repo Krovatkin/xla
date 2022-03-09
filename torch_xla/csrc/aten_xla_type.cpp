@@ -1567,14 +1567,20 @@ at::Tensor XLANativeFunctions::index(
     const at::Tensor& self,
     const c10::List<c10::optional<at::Tensor>>& indices) {
   XLA_FN_COUNTER("xla::");
-  auto dev = self.device();
-  bool indices_on_cpu_or_xla = std::all_of(
-      indices.begin(), indices.end(), [=](const at::OptionalTensorRef& opt) {
-        return opt.has_value() ? (opt->is_cpu() || opt->device() == dev) : true;
-      });
+  bool indices_on_cpu_or_xla =
+      std::all_of(indices.begin(), indices.end(),
+                  [=](const c10::optional<at::Tensor>& opt) {
+                    return opt.has_value() && opt->defined()
+                               ? (opt->is_cpu() || bridge::IsXlaTensor(*opt))
+                               : true;
+                  });
+  XLA_CHECK(bridge::IsXlaTensor(self))
+      << "1 indices should be either on cpu or on the same"
+      << " device as the indexed tensor (XLA)."
+      << " When using XLA, the indexed tensor must be an XLA tensor.";
   XLA_CHECK(indices_on_cpu_or_xla)
-      << "indices should be either on cpu or on the same"
-      << " device as the indexed tensor (" << dev << ")."
+      << "2 indices should be either on cpu or on the same"
+      << " device as the indexed tensor (XLA)."
       << " When using XLA, the indexed tensor must be an XLA tensor.";
   CanonicalIndexInfo canonical_index_info =
       GetCanonicalIndexInfo(self, indices);
